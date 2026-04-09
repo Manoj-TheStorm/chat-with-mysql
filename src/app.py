@@ -1,4 +1,9 @@
+import os
+import urllib.parse
 from dotenv import load_dotenv
+
+load_dotenv()
+
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
@@ -9,7 +14,8 @@ from langchain_groq import ChatGroq
 import streamlit as st
 
 def init_database(user: str, password: str, host: str, port: str, database: str) -> SQLDatabase:
-  db_uri = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
+  encoded_password = urllib.parse.quote_plus(password)
+  db_uri = f"mysql+mysqlconnector://{user}:{encoded_password}@{host}:{port}/{database}"
   return SQLDatabase.from_uri(db_uri)
 
 def get_sql_chain(db):
@@ -37,8 +43,8 @@ def get_sql_chain(db):
     
   prompt = ChatPromptTemplate.from_template(template)
   
-  # llm = ChatOpenAI(model="gpt-4-0125-preview")
-  llm = ChatGroq(model="mixtral-8x7b-32768", temperature=0)
+  llm = ChatOpenAI(model="gpt-4o-mini")
+  # llm = ChatGroq(model="mixtral-8x7b-32768", temperature=0)
   
   def get_schema(_):
     return db.get_table_info()
@@ -65,8 +71,8 @@ def get_response(user_query: str, db: SQLDatabase, chat_history: list):
   
   prompt = ChatPromptTemplate.from_template(template)
   
-  # llm = ChatOpenAI(model="gpt-4-0125-preview")
-  llm = ChatGroq(model="mixtral-8x7b-32768", temperature=0)
+  llm = ChatOpenAI(model="gpt-4o-mini")
+  # llm = ChatGroq(model="mixtral-8x7b-32768", temperature=0)
   
   chain = (
     RunnablePassthrough.assign(query=sql_chain).assign(
@@ -89,8 +95,6 @@ if "chat_history" not in st.session_state:
       AIMessage(content="Hello! I'm a SQL assistant. Ask me anything about your database."),
     ]
 
-load_dotenv()
-
 st.set_page_config(page_title="Chat with MySQL", page_icon=":speech_balloon:")
 
 st.title("Chat with MySQL")
@@ -99,11 +103,11 @@ with st.sidebar:
     st.subheader("Settings")
     st.write("This is a simple chat application using MySQL. Connect to the database and start chatting.")
     
-    st.text_input("Host", value="localhost", key="Host")
-    st.text_input("Port", value="3306", key="Port")
-    st.text_input("User", value="root", key="User")
-    st.text_input("Password", type="password", value="admin", key="Password")
-    st.text_input("Database", value="Chinook", key="Database")
+    st.text_input("Host", value=os.environ.get("DB_HOST", "localhost"), key="Host")
+    st.text_input("Port", value=os.environ.get("DB_PORT", "3306"), key="Port")
+    st.text_input("User", value=os.environ.get("DB_USER", "root"), key="User")
+    st.text_input("Password", type="password", value=os.environ.get("DB_PASSWORD", "admin"), key="Password")
+    st.text_input("Database", value=os.environ.get("DB_NAME", "Chinook"), key="Database")
     
     if st.button("Connect"):
         with st.spinner("Connecting to database..."):
