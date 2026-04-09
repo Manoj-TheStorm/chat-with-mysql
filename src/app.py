@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import re
+import streamlit.components.v1 as components
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
@@ -12,6 +14,16 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
 import streamlit as st
+
+def render_message_content(content: str):
+    parts = re.split(r"```html(.*?)```", content, flags=re.DOTALL)
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            if part.strip():
+                st.markdown(part)
+        else:
+            if part.strip():
+                components.html(part, height=500, scrolling=True)
 
 def init_database(user: str, password: str, host: str, port: str, database: str) -> SQLDatabase:
   encoded_password = urllib.parse.quote_plus(password)
@@ -62,6 +74,9 @@ def get_response(user_query: str, db: SQLDatabase, chat_history: list):
   template = """
     You are a data analyst at a company. You are interacting with a user who is asking you questions about the company's database.
     Based on the table schema below, question, sql query, and sql response, write a natural language response.
+    If the data is suitable for a chart or visualization, or if the user explicitly asks for one, you must write HTML/JS code (e.g. using Chart.js or D3.js) to render a chart representing the SQL Response data.
+    Enclose your HTML code exactly within a ```html ... ``` code block. Do NOT include anything outside of this block except your natural language response.
+    
     <SCHEMA>{schema}</SCHEMA>
 
     Conversation History: {chat_history}
@@ -124,7 +139,7 @@ with st.sidebar:
 for message in st.session_state.chat_history:
     if isinstance(message, AIMessage):
         with st.chat_message("AI"):
-            st.markdown(message.content)
+            render_message_content(message.content)
     elif isinstance(message, HumanMessage):
         with st.chat_message("Human"):
             st.markdown(message.content)
@@ -138,6 +153,6 @@ if user_query is not None and user_query.strip() != "":
         
     with st.chat_message("AI"):
         response = get_response(user_query, st.session_state.db, st.session_state.chat_history)
-        st.markdown(response)
+        render_message_content(response)
         
     st.session_state.chat_history.append(AIMessage(content=response))
