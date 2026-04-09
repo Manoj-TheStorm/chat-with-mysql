@@ -25,6 +25,15 @@ def render_message_content(content: str):
             if part.strip():
                 components.html(part, height=500, scrolling=True)
 
+def safe_db_run(db: SQLDatabase, query: str):
+    try:
+        res = str(db.run(query))
+        if len(res) > 20000:
+            return res[:20000] + "\n...[TRUNCATED due to length]..."
+        return res
+    except Exception as e:
+        return f"Error: {e}"
+
 def init_database(user: str, password: str, host: str, port: str, database: str) -> SQLDatabase:
   encoded_password = urllib.parse.quote_plus(password)
   db_uri = f"mysql+mysqlconnector://{user}:{encoded_password}@{host}:{port}/{database}"
@@ -40,6 +49,8 @@ def get_sql_chain(db):
     Conversation History: {chat_history}
     
     Write only the SQL query and nothing else. Do not wrap the SQL query in any other text, not even backticks.
+    
+    IMPORTANT: Unless the user wants all specific aggregate rows, ALWAYS append a LIMIT (e.g. LIMIT 50) to your SQL queries to prevent out-of-memory outputs.
     
     For example:
     Question: which 3 artists have the most tracks?
@@ -92,7 +103,7 @@ def get_response(user_query: str, db: SQLDatabase, chat_history: list):
   chain = (
     RunnablePassthrough.assign(query=sql_chain).assign(
       schema=lambda _: db.get_table_info(),
-      response=lambda vars: db.run(vars["query"]),
+      response=lambda vars: safe_db_run(db, vars["query"]),
     )
     | prompt
     | llm
@@ -152,7 +163,9 @@ if user_query is not None and user_query.strip() != "":
         st.markdown(user_query)
         
     with st.chat_message("AI"):
-        response = get_response(user_query, st.session_state.db, st.session_state.chat_history)
+        with st.spinner("Thinking..."):
+            recent_history = st.session_state.chat_history[-6:]
+            response = get_response(user_query, st.session_state.db, recent_history)
         render_message_content(response)
         
     st.session_state.chat_history.append(AIMessage(content=response))
